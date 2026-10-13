@@ -1,0 +1,30 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#1a0d0a"><meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-192.png">
+<title>Coffee Tycoon</title><style>
+*{box-sizing:border-box}body{margin:0;background:#1a0d0a;color:#f3e3d3;font-family:system-ui,sans-serif;padding:env(safe-area-inset-top) 12px 20px;max-width:520px;margin:auto;user-select:none}
+h1{text-align:center;color:#d9a066;margin:14px 0 4px}#money{text-align:center;font-size:2em;font-weight:700}#rate{text-align:center;opacity:.7;margin-bottom:10px}
+#brew{display:block;margin:10px auto;width:160px;height:160px;border-radius:50%;border:6px solid #8b1e1e;background:#4a2511;font-size:70px;cursor:pointer;transition:transform .08s}
+#brew:active{transform:scale(.93)}.u{display:flex;justify-content:space-between;align-items:center;background:#2b1610;border:1px solid #5a2a1a;border-radius:10px;padding:10px;margin:8px 0}
+.u button{background:#8b1e1e;color:#fff;border:0;border-radius:8px;padding:10px 12px;font-weight:700;min-width:96px}.u button:disabled{background:#4a3030;color:#999}
+small{opacity:.7}#reset{background:none;border:1px solid #5a2a1a;color:#a88;border-radius:8px;padding:6px 10px;display:block;margin:16px auto}
+</style></head><body>
+<h1>☕ Coffee Tycoon</h1><div id="money">$0</div><div id="rateEl">$0/s</div>
+<button id="brew" aria-label="Brew coffee">☕</button><div style="text-align:center"><small>Tap to sell a cup (+$<span id="tap">1</span>)</small></div>
+<div id="shop"></div><button id="reset">Reset progress</button>
+<script>
+const U=[{n:"Better Beans",d:"+$1 per tap",c:15,k:"tap",v:1},{n:"Barista",d:"+$1/s",c:25,k:"rate",v:1},{n:"Espresso Machine",d:"+$5/s",c:150,k:"rate",v:5},{n:"Drive-Thru",d:"+$25/s",c:900,k:"rate",v:25},{n:"New Café",d:"+$120/s",c:6000,k:"rate",v:120},{n:"Roastery",d:"+$700/s",c:45000,k:"rate",v:700},{n:"Franchise",d:"+$4000/s",c:350000,k:"rate",v:4000}];
+let s=JSON.parse(localStorage.getItem("ct")||"null")||{m:0,o:U.map(()=>0),t:Date.now()};
+const tap=()=>1+U.reduce((a,u,i)=>a+(u.k=="tap"?u.v*s.o[i]:0),0),rate=()=>U.reduce((a,u,i)=>a+(u.k=="rate"?u.v*s.o[i]:0),0),cost=i=>Math.ceil(U[i].c*1.15**s.o[i]);
+const f=n=>n<1e3?"$"+Math.floor(n):n<1e6?"$"+(n/1e3).toFixed(1)+"K":n<1e9?"$"+(n/1e6).toFixed(2)+"M":"$"+(n/1e9).toFixed(2)+"B";
+s.m+=rate()*Math.min((Date.now()-s.t)/1000,8*3600);
+shop.innerHTML=U.map((u,i)=>`<div class=u><div><b>${u.n}</b> <small>x<span id=o${i}></span></small><br><small>${u.d}</small></div><button id=b${i} onclick=buy(${i})></button></div>`).join("");
+function buy(i){if(s.m>=cost(i)){s.m-=cost(i);s.o[i]++;draw()}}
+function draw(){document.getElementById("money").textContent=f(s.m);rateEl.textContent=f(rate())+"/s";document.getElementById("tap").textContent=tap();U.forEach((u,i)=>{const b=document.getElementById("b"+i);b.textContent=f(cost(i));b.disabled=s.m<cost(i);document.getElementById("o"+i).textContent=s.o[i]})}
+brew.onclick=()=>{s.m+=tap();navigator.vibrate&&navigator.vibrate(10);draw()};
+reset.onclick=()=>{if(confirm("Reset all progress?")){s={m:0,o:U.map(()=>0),t:Date.now()};draw()}};
+let last=performance.now();setInterval(()=>{const n=performance.now();s.m+=rate()*(n-last)/1000;last=n;s.t=Date.now();localStorage.setItem("ct",JSON.stringify(s));draw()},250);draw();
+if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");
+</script></body></html>
