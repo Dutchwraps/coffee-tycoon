@@ -10,19 +10,61 @@ h1{text-align:center;color:#d9a066;margin:14px 0 4px}#money{text-align:center;fo
 #brew:active{transform:scale(.93)}.u{display:flex;justify-content:space-between;align-items:center;background:#2b1610;border:1px solid #5a2a1a;border-radius:10px;padding:10px;margin:8px 0}
 .u button{background:#8b1e1e;color:#fff;border:0;border-radius:8px;padding:10px 12px;font-weight:700;min-width:96px}.u button:disabled{background:#4a3030;color:#999}
 small{opacity:.7}#reset{background:none;border:1px solid #5a2a1a;color:#a88;border-radius:8px;padding:6px 10px;display:block;margin:16px auto}
-</style></head><body>
-<h1>☕ Coffee Tycoon</h1><div id="money">$0</div><div id="rateEl">$0/s</div>
+#lvl{display:flex;just<h1>☕ Coffee Tycoon</h1>
+<div id="lvl"><b id="lvN">Level 1</b><span id="goal"></span><span id="timer"></span></div><div id="bar"><div id="fill"></div></div>
+<div id="money">$0</div><div id="rateEl">$0/s</div><div id="tw"></div>
+<div id="cust"></div>
 <button id="brew" aria-label="Brew coffee">☕</button><div style="text-align:center"><small>Tap to sell a cup (+$<span id="tap">1</span>)</small></div>
 <div id="shop"></div><button id="reset">Reset progress</button>
+<div id="ov"><div><h2 id="ovT"></h2><p id="ovP"></p><button id="ovB">Next</button></div></div>
 <script>
+const $=id=>document.getElementById(id);
 const U=[{n:"Better Beans",d:"+$1 per tap",c:15,k:"tap",v:1},{n:"Barista",d:"+$1/s",c:25,k:"rate",v:1},{n:"Espresso Machine",d:"+$5/s",c:150,k:"rate",v:5},{n:"Drive-Thru",d:"+$25/s",c:900,k:"rate",v:25},{n:"New Café",d:"+$120/s",c:6000,k:"rate",v:120},{n:"Roastery",d:"+$700/s",c:45000,k:"rate",v:700},{n:"Franchise",d:"+$4000/s",c:350000,k:"rate",v:4000}];
-let s=JSON.parse(localStorage.getItem("ct")||"null")||{m:0,o:U.map(()=>0),t:Date.now()};
-const tap=()=>1+U.reduce((a,u,i)=>a+(u.k=="tap"?u.v*s.o[i]:0),0),rate=()=>U.reduce((a,u,i)=>a+(u.k=="rate"?u.v*s.o[i]:0),0),cost=i=>Math.ceil(U[i].c*1.15**s.o[i]);
-const f=n=>n<1e3?"$"+Math.floor(n):n<1e6?"$"+(n/1e3).toFixed(1)+"K":n<1e9?"$"+(n/1e6).toFixed(2)+"M":"$"+(n/1e9).toFixed(2)+"B";
-s.m+=rate()*Math.min((Date.now()-s.t)/1000,8*3600);
+const NAMES=["Corner Cart","Tiny Kiosk","Rush Hour Café","Rent Is Due","Picky Patrons","Beat the Clock","Downtown Lease","Morning Madness","Critics in Town","Coffee Empire"];
+// Level config: goal, cost multiplier, twists
+function L(n){const i=n-1;return{name:NAMES[i]||("Empire Expansion "+(n-9)),goal:Math.round(200*Math.pow(3.2,i)),cm:Math.pow(1.3,i),
+ rush:n>=3,rent:n>=4?Math.round(0.6*Math.pow(2.9,i-3)*10)/10:0,picky:n>=5,time:n>=6?240+30*Math.min(n-6,6):0,patience:n>=5?Math.max(2.5,6-0.3*(n-5)):0}}
+const fresh=()=>({lv:1,m:0,o:U.map(()=>0),t:Date.now(),el:0,v:2});
+let s=JSON.parse(localStorage.getItem("ct")||"null");
+if(!s||typeof s!=="object")s=fresh();
+if(!s.v){s={...fresh(),m:0};} // migrate v1 (pre-levels) save: start fresh at Level 1
+s.o=U.map((_,i)=>(s.o&&s.o[i])||0);if(!s.lv)s.lv=1;if(!s.el)s.el=0;s.v=2;
+let cfg=L(s.lv),paused=false,rushT=0,nextRush=40,cust=null,custT=0;
+const tap=()=>1+U.reduce((a,u,i)=>a+(u.k=="tap"?u.v*s.o[i]:0),0),base=()=>U.reduce((a,u,i)=>a+(u.k=="rate"?u.v*s.o[i]:0),0);
+const rate=()=>base()*(rushT>0?2:1)-cfg.rent,cost=i=>Math.ceil(U[i].c*cfg.cm*1.15**s.o[i]);
+const f=n=>{const g=n<0?"-":"";n=Math.abs(n);return g+(n<1e3?"$"+Math.floor(n):n<1e6?"$"+(n/1e3).toFixed(1)+"K":n<1e9?"$"+(n/1e6).toFixed(2)+"M":n<1e12?"$"+(n/1e9).toFixed(2)+"B":"$"+(n/1e12).toFixed(2)+"T")};
+if(!cfg.time&&rate()>0)s.m+=rate()*Math.min((Date.now()-s.t)/1000,8*3600);
 shop.innerHTML=U.map((u,i)=>`<div class=u><div><b>${u.n}</b> <small>x<span id=o${i}></span></small><br><small>${u.d}</small></div><button id=b${i} onclick=buy(${i})></button></div>`).join("");
-function buy(i){if(s.m>=cost(i)){s.m-=cost(i);s.o[i]++;draw()}}
-function draw(){document.getElementById("money").textContent=f(s.m);rateEl.textContent=f(rate())+"/s";document.getElementById("tap").textContent=tap();U.forEach((u,i)=>{const b=document.getElementById("b"+i);b.textContent=f(cost(i));b.disabled=s.m<cost(i);document.getElementById("o"+i).textContent=s.o[i]})}
+function buy(i){if(!paused&&s.m>=cost(i)){s.m-=cost(i);s.o[i]++;draw()}}
+function twists(c){const t=[];if(c.rush)t.push("⚡ Rush hours: 2× income at times");if(c.rent)t.push("🏠 Rent: "+f(c.rent)+"/s");if(c.picky)t.push("🧐 Picky customers: tap their order before they leave");if(c.time)t.push("⏱ Time limit: "+Math.floor(c.time/60)+" min");return t.length?t.join("<br>"):"No twists — just sell coffee!"}
+function show(t,p,btn,fn){paused=true;$("ovT").textContent=t;$("ovP").innerHTML=p;$("ovB").textContent=btn;$("ovB").onclick=()=>{$("ov").style.display="none";paused=false;fn&&fn()};$("ov").style.display="flex"}
+function start(n){s.lv=n;s.m=0;s.o=U.map(()=>0);s.el=0;cfg=L(n);rushT=0;nextRush=40;cust=null;draw();
+ show("Level "+n+": "+cfg.name,"Goal: <b>"+f(cfg.goal)+"</b><br>Upgrades cost "+cfg.cm.toFixed(2)+"×<br><br>"+twists(cfg),"Start")}
+function win(){const n=s.lv;save();show("🎉 Level "+n+" complete!","You earned "+f(cfg.goal)+".<br>Next up is harder:<br><br>"+twists(L(n+1)),"Next level",()=>start(n+1))}
+function lose(){show("⏰ Time's up!","You reached "+f(s.m)+" of "+f(cfg.goal)+".","Retry level",()=>start(s.lv))}
+const ORD=["☕","🥛","🧊","🍫","🍵"];
+function newCust(){const want=ORD[Math.floor(Math.random()*ORD.length)];cust={want,t:cfg.patience};}
+brew.onclick=()=>{if(paused)return;let g=tap();
+ if(cfg.picky){if(cust){g*=3;cust=null;custT=1.5+Math.random()*2}else g=Math.ceil(g*0.5)}
+ s.m+=g;navigator.vibrate&&navigator.vibrate(10);draw()};
+function draw(){$("money").textContent=f(s.m);$("rateEl").textContent=f(rate())+"/s";$("tap").textContent=tap();$("lvN").textContent="Level "+s.lv;
+ $("goal").textContent=f(Math.max(0,s.m))+" / "+f(cfg.goal);$("fill").style.width=Math.min(100,Math.max(0,s.m/cfg.goal*100))+"%";
+ $("timer").textContent=cfg.time?"⏱ "+Math.max(0,Math.ceil(cfg.time-s.el))+"s":"";
+ $("tw").textContent=rushT>0?"⚡ RUSH HOUR! 2× income ("+Math.ceil(rushT)+"s)":(cfg.rent?"🏠 Rent "+f(cfg.rent)+"/s":"");
+ $("cust").textContent=cfg.picky?(cust?"🧐 wants "+cust.want+" — tap now for 3×! ("+cust.t.toFixed(1)+"s)":"…waiting for a customer (taps pay ½)"):"";
+ U.forEach((u,i)=>{const b=$("b"+i);b.textContent=f(cost(i));b.disabled=paused||s.m<cost(i);$("o"+i).textContent=s.o[i]})}
+const save=()=>{s.t=Date.now();localStorage.setItem("ct",JSON.stringify(s))};
+reset.onclick=()=>{if(confirm("Reset all progress (back to Level 1)?"))start(1)};
+let last=performance.now();setInterval(()=>{const n=performance.now(),dt=(n-last)/1000;last=n;if(paused||document.hidden&&cfg.time){draw();return}
+ s.m=Math.max(0,s.m+rate()*dt);if(cfg.time)s.el+=dt;
+ if(cfg.rush){if(rushT>0)rushT-=dt;else if((nextRush-=dt)<=0){rushT=15;nextRush=45+Math.random()*30}}
+ if(cfg.picky){if(cust){cust.t-=dt;if(cust.t<=0){cust=null;custT=1+Math.random()*2}}else if((custT-=dt)<=0)newCust()}
+ if(s.m>=cfg.goal)win();else if(cfg.time&&s.el>=cfg.time)lose();
+ save();draw()},100);
+draw();if(s.m===0&&s.o.every(x=>!x))start(s.lv);
+if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");
+</script>
+ion draw(){document.getElementById("money").textContent=f(s.m);rateEl.textContent=f(rate())+"/s";document.getElementById("tap").textContent=tap();U.forEach((u,i)=>{const b=document.getElementById("b"+i);b.textContent=f(cost(i));b.disabled=s.m<cost(i);document.getElementById("o"+i).textContent=s.o[i]})}
 brew.onclick=()=>{s.m+=tap();navigator.vibrate&&navigator.vibrate(10);draw()};
 reset.onclick=()=>{if(confirm("Reset all progress?")){s={m:0,o:U.map(()=>0),t:Date.now()};draw()}};
 let last=performance.now();setInterval(()=>{const n=performance.now();s.m+=rate()*(n-last)/1000;last=n;s.t=Date.now();localStorage.setItem("ct",JSON.stringify(s));draw()},250);draw();
